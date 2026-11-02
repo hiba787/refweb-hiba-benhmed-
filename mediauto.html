@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MediAuto – Rendez-vous médicaux automatisés</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f4f8f7;--card:#fff;--tx:#17302c;--mut:#5d7873;--pri:#0f8b78;--pri2:#e2f4f0;--bd:#d6e4e1;--red:#c0392b;--amb:#b7791f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1b19;--card:#172724;--tx:#e6f2ef;--mut:#8fb0aa;--pri:#2fc2a9;--pri2:#1d3a35;--bd:#2a413d;--red:#ef7b6e;--amb:#e5b45a}}
+:root[data-theme="dark"]{--bg:#0f1b19;--card:#172724;--tx:#e6f2ef;--mut:#8fb0aa;--pri:#2fc2a9;--pri2:#1d3a35;--bd:#2a413d;--red:#ef7b6e;--amb:#e5b45a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+header{padding:18px 16px 8px;max-width:980px;margin:auto}
+h1{margin:0;font-size:1.5rem}h1 span{color:var(--pri)}
+.sub{color:var(--mut);margin:2px 0 0;font-size:.92rem}
+nav{display:flex;gap:6px;max-width:980px;margin:8px auto;padding:0 16px;overflow-x:auto}
+nav button{border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:8px 14px;border-radius:20px;cursor:pointer;white-space:nowrap;font-size:.9rem}
+nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+main{max-width:980px;margin:auto;padding:8px 16px 40px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:.85rem;color:var(--mut);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:600px){.row{grid-template-columns:1fr}}
+.btn{background:var(--pri);color:#fff;border:0;padding:9px 16px;border-radius:8px;cursor:pointer;font:inherit;font-weight:600}
+.btn.s{padding:5px 10px;font-size:.8rem}.btn.g{background:var(--pri2);color:var(--pri)}.btn.r{background:transparent;color:var(--red);border:1px solid var(--red)}
+.warn{background:var(--pri2);border-left:4px solid var(--pri);padding:8px 12px;border-radius:6px;font-size:.88rem;margin:10px 0}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.86rem}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);vertical-align:top}th{color:var(--mut);font-weight:600}
+.st{padding:2px 9px;border-radius:12px;font-size:.75rem;font-weight:600;background:var(--pri2);color:var(--pri);white-space:nowrap}
+.st.Annulé,.st.Expiré{background:transparent;color:var(--red);border:1px solid var(--red)}.st.Attente,.st.Liste{color:var(--amb)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}.stat b{font-size:1.6rem;display:block;color:var(--pri)}
+.mail{border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--card)}
+.mail small{color:var(--mut)}.mail .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.log div{font-family:ui-monospace,monospace;font-size:.78rem;padding:3px 0;border-bottom:1px dashed var(--bd)}
+.muted{color:var(--mut)}.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+<h1>Medi<span>Auto</span> 🩺</h1>
+<p class="sub">Cabinet du Dr Ben Salah · Prise de rendez-vous automatisée (prototype)</p>
+</header>
+<nav id="tabs"></nav>
+<main id="app"></main>
+<script>
+var KEY='mediauto_v1',S={appts:[],mails:[],log:[],n:1,tab:'patient'};
+try{var raw=localStorage.getItem(KEY);if(raw)S=JSON.parse(raw)}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML}
+function fmt(iso){return iso?new Date(iso).toLocaleString('fr-FR',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'—'}
+function now(){return new Date().toLocaleTimeString('fr-FR')}
+function log(t){S.log.unshift(now()+' · '+t)}
+function A(id){return S.appts.find(function(a){return a.id===id})}
+
+/* ---------- Moteur de créneaux ---------- */
+function allSlots(){
+  var out=[],base=new Date();
+  for(var d=1;d<=14;d++){
+    var day=new Date(base.getFullYear(),base.getMonth(),base.getDate()+d);
+    if(day.getDay()==0||day.getDay()==6)continue;
+    [9,9.5,10,10.5,11,11.5,14,14.5,15,15.5,16,16.5].forEach(function(h){
+      out.push(new Date(day.getFullYear(),day.getMonth(),day.getDate(),Math.floor(h),(h%1)*60).toISOString());
+    });
+  }
+  return out;
+}
+function taken(){return S.appts.filter(function(a){return a.slot&&(a.status=='En attente'||a.status=='Confirmé')}).map(function(a){return a.slot})}
+function findSlot(a){
+  var t=taken(),free=allSlots().filter(function(s){return t.indexOf(s)<0&&(a.tried||[]).indexOf(s)<0});
+  var pref=free.filter(function(s){var h=new Date(s).getHours();return a.pref=='matin'?h<12:a.pref=='apres-midi'?h>=14:true});
+  if(a.urgent)return free[0]||null;
+  return pref[0]||free[0]||null;
+}
+function sendMail(a,subject,body,acts){
+  S.mails.unshift({id:'m'+Date.now()+Math.random().toString(36).slice(2,5),to:a.email,name:a.name,subject:subject,body:body,acts:acts||[],at:now()});
+  log('📧 Email envoyé à '+a.email+' : '+subject);
+}
+function assign(a){
+  var s=findSlot(a);
+  if(!s){a.status='Liste d’attente';a.slot=null;
+    sendMail(a,'Liste d’attente','Bonjour '+a.name+', aucun créneau n’est libre pour le moment. Vous êtes en liste d’attente : nous vous écrirons dès qu’une place se libère.');
+    log('⏳ '+a.name+' → liste d’attente');return}
+  a.slot=s;a.status='En attente';a.sentAt=Date.now();
+  sendMail(a,'Proposition de rendez-vous','Bonjour '+a.name+', nous vous proposons le '+fmt(s)+'. Merci de confirmer.',
+    [['Confirmer','confirm',a.id],['Autre créneau','other',a.id],['Annuler','cancel',a.id]]);
+  log('🗓 Créneau '+fmt(s)+' proposé à '+a.name);
+}
+function waitlist(){
+  var w=S.appts.filter(function(a){return a.status=='Liste d’attente'})[0];
+  if(w){log('🔁 Liste d’attente : '+w.name+' reçoit le créneau libéré');assign(w)}
+}
+
+/* ---------- Actions patient / secrétariat ---------- */
+function act(type,id){
+  var a=A(id);if(!a)return;
+  if(type=='confirm'&&a.status=='En attente'){
+    a.status='Confirmé';
+    sendMail(a,'Rendez-vous confirmé ✅','Votre rendez-vous du '+fmt(a.slot)+' est confirmé. Un rappel vous sera envoyé 24 h avant. Pour annuler, utilisez le lien ci-dessous.',[['Annuler mon rendez-vous','cancel',a.id]]);
+    log('✅ '+a.name+' a confirmé · créneau bloqué dans l’agenda');
+  }else if(type=='other'&&a.status=='En attente'){
+    a.tried=(a.tried||[]).concat(a.slot);a.slot=null;log('↩ '+a.name+' demande un autre créneau');assign(a);
+  }else if(type=='cancel'&&(a.status=='En attente'||a.status=='Confirmé')){
+    var late=a.slot&&(new Date(a.slot)-Date.now()<2*3600e3);
+    a.status='Annulé';a.notes=late?'Annulation tardive (<2 h)':'';
+    sendMail(a,'Annulation enregistrée','Votre rendez-vous du '+fmt(a.slot)+' est annulé.');
+    log('❌ '+a.name+' a annulé · événement supprimé de l’agenda · médecin notifié');
+    a.slot=null;waitlist();
+  }else if(type=='expire'&&a.status=='En attente'){
+    a.status='Expiré';log('⌛ Pas de réponse de '+a.name+' après 48 h · créneau libéré');
+    sendMail(a,'Demande expirée','Sans réponse de votre part, le créneau a été libéré. Vous pouvez refaire une demande.');
+    a.slot=null;waitlist();
+  }else if(type=='remind'&&a.status=='Confirmé'){
+    sendMail(a,'Rappel : rendez-vous demain','Rappel de votre rendez-vous du '+fmt(a.slot)+'.',[['Annuler','cancel',a.id]]);
+  }else if(type=='doccancel'&&a.status=='Confirmé'){
+    a.status='Annulé';a.notes='Annulé par le médecin';a.tried=[];
+    log('⚠️ Médecin annule le rendez-vous de '+a.name+' → reprogrammation');
+    a.slot=null;a.status='Nouveau';sendMail(a,'Rendez-vous déplacé','Le médecin est indisponible. Nous vous proposons un nouveau créneau.');assign(a);
+  }
+  save();render();
+}
+function submitForm(){
+  var g=function(i){return document.getElementById(i)};
+  var a={id:'RDV-'+String(S.n).padStart(3,'0'),name:g('f_name').value.trim(),phone:g('f_tel').value.trim(),email:g('f_mail').value.trim(),
+    reason:g('f_reason').value,pref:g('f_pref').value,urgent:g('f_urg').checked,created:new Date().toISOString(),slot:null,status:'Nouveau',tried:[],notes:''};
+  if(!a.name||!a.email||!g('f_ok').checked){g('err').textContent='Nom, email et consentement sont obligatoires.';return}
+  S.n++;S.appts.push(a);log('📝 Nouvelle demande '+a.id+' enregistrée dans le Sheet ('+a.name+')');
+  assign(a);S.tab='mails';save();render();
+}
+function csv(){
+  var h=['ID','Date','Nom','Téléphone','Email','Motif','Créneau','Statut','Notes'];
+  var r=S.appts.map(function(a){return [a.id,a.created,a.name,a.phone,a.email,a.reason,a.slot||'',a.status,a.notes||''].map(function(x){return '"'+String(x).replace(/"/g,'""')+'"'}).join(',')});
+  var b=new Blob([[h.join(',')].concat(r).join('\n')],{type:'text/csv'}),u=URL.createObjectURL(b),l=document.createElement('a');
+  l.href=u;l.download='rendez-vous.csv';l.click();
+}
+function reset(){if(confirm('Tout réinitialiser ?')){S={appts:[],mails:[],log:[],n:1,tab:'patient'};save();render()}}
+
+/* ---------- Vues ---------- */
+function vPatient(){return '<div class="card"><h2 style="margin-top:0">Prendre rendez-vous</h2>'+
+'<div class="warn">🚨 En cas d’urgence, appelez le <b>190</b> ou rendez-vous aux urgences. Ce formulaire ne remplace pas un appel d’urgence.</div>'+
+'<div class="row"><div><label>Nom complet</label><input id="f_name"></div><div><label>Téléphone</label><input id="f_tel" type="tel"></div></div>'+
+'<div class="row"><div><label>Email</label><input id="f_mail" type="email"></div><div><label>Motif</label><select id="f_reason"><option>Consultation</option><option>Contrôle</option><option>Certificat</option><option>Renouvellement d’ordonnance</option></select></div></div>'+
+'<div class="row"><div><label>Préférence</label><select id="f_pref"><option value="any">Indifférent</option><option value="matin">Matin</option><option value="apres-midi">Après-midi</option></select></div>'+
+'<div><label>&nbsp;</label><label style="margin:0;display:flex;gap:8px;align-items:center;color:var(--tx)"><input type="checkbox" id="f_urg" style="width:auto"> Demande urgente</label></div></div>'+
+'<label style="display:flex;gap:8px;align-items:flex-start;color:var(--tx)"><input type="checkbox" id="f_ok" style="width:auto;margin-top:4px"> J’accepte que mes données de santé soient utilisées uniquement pour gérer mon rendez-vous (loi n° 2004-63).</label>'+
+'<p id="err" style="color:var(--red);margin:6px 0"></p><button class="btn" onclick="submitForm()">Envoyer ma demande</button></div>'}
+
+function vMails(){
+  if(!S.mails.length)return '<div class="card muted">Aucun email pour l’instant. Envoyez une demande depuis l’onglet Patient.</div>';
+  return '<p class="muted">Boîte mail simulée : cliquez sur les boutons comme le ferait le patient.</p>'+S.mails.map(function(m){
+    var cur=S.appts.filter(function(a){return a.email==m.to})[0];
+    return '<div class="mail"><small>À : '+esc(m.name)+' &lt;'+esc(m.to)+'&gt; · '+m.at+'</small><br><b>'+esc(m.subject)+'</b><p style="margin:4px 0">'+esc(m.body)+'</p>'+
+    (m.acts.length?'<div class="acts">'+m.acts.map(function(x){return '<button class="btn s '+(x[1]=='cancel'?'r':'g')+'" onclick="act(\''+x[1]+'\',\''+x[2]+'\')">'+x[0]+'</button>'}).join('')+'</div>':'')+'</div>'}).join('')}
+
+function vSec(){
+  var c=function(s){return S.appts.filter(function(a){return a.status==s}).length},tot=S.appts.length;
+  var cl=tot?Math.round(c('Annulé')/tot*100):0;
+  return '<div class="stats"><div class="stat"><b>'+tot+'</b>Demandes</div><div class="stat"><b>'+c('Confirmé')+'</b>Confirmés</div><div class="stat"><b>'+c('En attente')+'</b>En attente</div><div class="stat"><b>'+cl+'%</b>Annulations</div></div>'+
+  '<div class="card tw"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><h3 style="margin:0">Google Sheet (simulé)</h3><span><button class="btn s g" onclick="csv()">Exporter CSV</button> <button class="btn s r" onclick="reset()">Réinitialiser</button></span></div>'+
+  (tot?'<table><tr><th>ID</th><th>Patient</th><th>Motif</th><th>Créneau</th><th>Statut</th><th>Actions (simulation)</th></tr>'+S.appts.map(function(a){
+    var st=a.status.split(' ')[0].replace('’','');
+    return '<tr><td>'+a.id+'</td><td>'+esc(a.name)+(a.urgent?' 🚨':'')+'<br><small class="muted">'+esc(a.phone)+'</small></td><td>'+esc(a.reason)+'</td><td>'+fmt(a.slot)+'<br><small class="muted">'+esc(a.notes)+'</small></td><td><span class="st '+st+'">'+a.status+'</span></td><td>'+
+    (a.status=='En attente'?'<button class="btn s g" onclick="act(\'expire\',\''+a.id+'\')">48 h sans réponse</button>':'')+
+    (a.status=='Confirmé'?'<button class="btn s g" onclick="act(\'remind\',\''+a.id+'\')">Rappel J-1</button> <button class="btn s r" onclick="act(\'doccancel\',\''+a.id+'\')">Médecin annule</button>':'')+'</td></tr>'}).join('')+'</table>':'<p class="muted">Aucune donnée.</p>')+'</div>'+
+  '<div class="card"><h3 style="margin-top:0">Journal de l’automatisation</h3><div class="log">'+(S.log.map(function(l){return '<div>'+esc(l)+'</div>'}).join('')||'<span class="muted">Vide</span>')+'</div></div>'}
+
+function vAgenda(){
+  var t={};S.appts.forEach(function(a){if(a.slot&&(a.status=='Confirmé'||a.status=='En attente'))t[a.slot]=a});
+  var days={};allSlots().forEach(function(s){var k=new Date(s).toDateString();(days[k]=days[k]||[]).push(s)});
+  return '<div class="card"><h3 style="margin-top:0">Agenda du médecin (14 jours)</h3>'+Object.keys(days).slice(0,10).map(function(k){
+    return '<div style="margin-bottom:10px"><b>'+new Date(k).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})+'</b><div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">'+days[k].map(function(s){
+      var a=t[s],h=new Date(s).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+      return '<span class="st '+(a?(a.status=='Confirmé'?'':'Attente'):'')+'" style="'+(a?'':'background:transparent;color:var(--mut);border:1px solid var(--bd)')+'">'+h+(a?' · '+esc(a.name):'')+'</span>'}).join('')+'</div></div>'}).join('')+'</div>'}
+
+function render(){
+  var T=[['patient','Patient'],['mails','Emails ('+S.mails.length+')'],['sec','Secrétariat'],['agenda','Agenda']];
+  document.getElementById('tabs').innerHTML=T.map(function(t){return '<button class="'+(S.tab==t[0]?'on':'')+'" onclick="S.tab=\''+t[0]+'\';render()">'+t[1]+'</button>'}).join('');
+  document.getElementById('app').innerHTML=S.tab=='patient'?vPatient():S.tab=='mails'?vMails():S.tab=='sec'?vSec():vAgenda();
+}
+render();
+</script>
+</body>
+</html>
